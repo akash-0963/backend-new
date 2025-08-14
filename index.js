@@ -16,7 +16,7 @@ const searchRouter = require("./route/searchRoute");
 const notificationRouter = require("./route/notificationRoute");
 
 const {cloudinaryConnect} = require("./config/cloudinary");
-const serviceAccount = require("https://drive.google.com/file/d/1B5WYe1kJ7I4aUWrXKfGJowLjMgZAji8c/view?usp=drive_link");
+const serviceAccount = require("/etc/secrets/connektx-firebase-adminsdk-fbsvc-b76858ef61.json");
 
 database.connect();
 admin.initializeApp({
