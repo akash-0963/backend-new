@@ -31,21 +31,24 @@ const sendPushNotification = async (recipientId, title, body, data = {}) => {
             data, // Optional data like { postId: '...' }
         };
 
-        // 4. Send the message using the Firebase Admin SDK
-        const response = await admin.messaging().sendMulticast(message);
+        // 4. Send the message using the Firebase Admin SDK's modern method
+        const response = await admin.messaging().sendEachForMulticast(message);
         console.log('Successfully sent push notification:', response.successCount, 'messages');
 
         // Optional: Clean up invalid tokens from your database
         if (response.failureCount > 0) {
             const tokensToRemove = [];
             response.responses.forEach((resp, idx) => {
+                // Check for errors indicating an invalid or unregistered token
                 if (!resp.success && (resp.error.code === 'messaging/registration-token-not-registered' || resp.error.code === 'messaging/invalid-registration-token')) {
                     tokensToRemove.push(user.deviceTokens[idx]);
                 }
             });
-            if(tokensToRemove.length > 0) {
+
+            if (tokensToRemove.length > 0) {
+                console.log('Removing invalid device tokens:', tokensToRemove);
                 await User.updateOne({ _id: recipientId }, { $pullAll: { deviceTokens: tokensToRemove } });
-                console.log('Removed invalid device tokens:', tokensToRemove.length);
+                console.log('Removed', tokensToRemove.length, 'invalid tokens.');
             }
         }
 
@@ -69,7 +72,7 @@ exports.createNotification = async (recipient, sender, type, postId = null) => {
             return;
         }
 
-        const senderUser = await User.findById(sender);
+        const senderUser = await User.findById(sender).select('name'); // Optimize query to only get the name
         if (!senderUser) {
             console.error("Notification not created: Sender not found.");
             return;
@@ -78,26 +81,36 @@ exports.createNotification = async (recipient, sender, type, postId = null) => {
         // --- Part 1: Create the In-App Notification ---
         let message = '';
         let title = 'New Notification';
+        // The data payload for the push notification
+        let pushData = {
+            notificationType: type,
+            senderId: sender.toString()
+        };
+
         switch (type) {
             case 'like':
                 title = 'New Like';
                 message = `${senderUser.name} liked your post.`;
+                if(postId) pushData.postId = postId.toString();
                 break;
             case 'comment':
                 title = 'New Comment';
                 message = `${senderUser.name} commented on your post.`;
+                if(postId) pushData.postId = postId.toString();
                 break;
             case 'reply':
-                 title = 'New Reply';
+                title = 'New Reply';
                 message = `${senderUser.name} replied to your comment.`;
+                if(postId) pushData.postId = postId.toString();
                 break;
             case 'follow':
-                 title = 'New Follower';
+                title = 'New Follower';
                 message = `${senderUser.name} started following you.`;
                 break;
             case 'repost':
-                 title = 'New Repost';
+                title = 'New Repost';
                 message = `${senderUser.name} reposted your post.`;
+                if(postId) pushData.postId = postId.toString();
                 break;
             default:
                 return;
@@ -115,8 +128,7 @@ exports.createNotification = async (recipient, sender, type, postId = null) => {
         console.log("In-app notification created successfully.");
 
         // --- Part 2: Trigger the Push Notification ---
-        // This function is called immediately after the in-app notification is saved.
-        await sendPushNotification(recipient, title, message, { postId: postId ? postId.toString() : '' });
+        await sendPushNotification(recipient, title, message, pushData);
 
     } catch (error) {
         console.error("Error creating notification:", error);
