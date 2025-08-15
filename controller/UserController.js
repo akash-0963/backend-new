@@ -474,13 +474,14 @@ exports.addPortfolio = async(req,res) => {
 }
 
 
-
-// ... existing exports
-
 exports.registerDeviceToken = async (req, res) => {
     try {
         const { token } = req.body;
         const userId = req.userId;
+
+        console.log(`[Push Token] Attempting to register token for userId: ${userId}`);
+        console.log(`[Push Token] Received token from client: ${token}`);
+    
 
         if (!token) {
             return res.status(400).json({ success: false, message: "Device token is required." });
@@ -488,6 +489,7 @@ exports.registerDeviceToken = async (req, res) => {
 
         const user = await User.findById(userId);
         if (!user) {
+            console.error(`[Push Token] User not found for ID: ${userId}`);
             return res.status(404).json({ success: false, message: "User not found." });
         }
 
@@ -495,6 +497,11 @@ exports.registerDeviceToken = async (req, res) => {
         if (!user.deviceTokens.includes(token)) {
             user.deviceTokens.push(token);
             await user.save();
+            // --- Add this success log ---
+            console.log(`[Push Token] Successfully saved token for userId: ${userId}`);
+        } else {
+            // --- Add this log for duplicates ---
+            console.log(`[Push Token] Token already exists for userId: ${userId}. No action taken.`);
         }
 
         return res.status(200).json({
@@ -503,6 +510,8 @@ exports.registerDeviceToken = async (req, res) => {
         });
 
     } catch (err) {
+        // --- Add this error log ---
+        console.error(`[Push Token] Error during registration: ${err.message}`);
         return res.status(500).json({
             success: false,
             message: err.message,
