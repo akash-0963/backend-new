@@ -481,7 +481,6 @@ exports.registerDeviceToken = async (req, res) => {
 
         console.log(`[Push Token] Attempting to register token for userId: ${userId}`);
         console.log(`[Push Token] Received token from client: ${token}`);
-    
 
         if (!token) {
             return res.status(400).json({ success: false, message: "Device token is required." });
@@ -493,14 +492,17 @@ exports.registerDeviceToken = async (req, res) => {
             return res.status(404).json({ success: false, message: "User not found." });
         }
 
-        // Add the new token only if it doesn't already exist to avoid duplicates
         if (!user.deviceTokens.includes(token)) {
             user.deviceTokens.push(token);
+
+            // --- THIS IS THE FIX ---
+            // Explicitly tell Mongoose that the deviceTokens array has changed.
+            user.markModified('deviceTokens');
+            // --- END OF FIX ---
+
             await user.save();
-            // --- Add this success log ---
             console.log(`[Push Token] Successfully saved token for userId: ${userId}`);
         } else {
-            // --- Add this log for duplicates ---
             console.log(`[Push Token] Token already exists for userId: ${userId}. No action taken.`);
         }
 
@@ -510,7 +512,6 @@ exports.registerDeviceToken = async (req, res) => {
         });
 
     } catch (err) {
-        // --- Add this error log ---
         console.error(`[Push Token] Error during registration: ${err.message}`);
         return res.status(500).json({
             success: false,
