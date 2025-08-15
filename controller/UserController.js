@@ -472,3 +472,40 @@ exports.addPortfolio = async(req,res) => {
         })
     }
 }
+
+
+
+// ... existing exports
+
+exports.registerDeviceToken = async (req, res) => {
+    try {
+        const { token } = req.body;
+        const userId = req.userId;
+
+        if (!token) {
+            return res.status(400).json({ success: false, message: "Device token is required." });
+        }
+
+        const user = await User.findById(userId);
+        if (!user) {
+            return res.status(404).json({ success: false, message: "User not found." });
+        }
+
+        // Add the new token only if it doesn't already exist to avoid duplicates
+        if (!user.deviceTokens.includes(token)) {
+            user.deviceTokens.push(token);
+            await user.save();
+        }
+
+        return res.status(200).json({
+            success: true,
+            message: "Device token registered successfully.",
+        });
+
+    } catch (err) {
+        return res.status(500).json({
+            success: false,
+            message: err.message,
+        });
+    }
+};
