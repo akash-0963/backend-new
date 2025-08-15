@@ -1,91 +1,73 @@
+const fetch = require('node-fetch'); // Make sure to install node-fetch: npm install node-fetch
 const Notification = require('../modules/notification');
 const User = require('../modules/user');
-const admin = require('firebase-admin');
 
 /**
- * Sends a push notification to a user's registered devices using FCM.
- * This is a helper function called by createNotification.
- * @param {string} recipientId - The ID of the user to notify.
- * @param {string} title - The title of the push notification.
- * @param {string} body - The main message content of the push notification.
- * @param {object} [data={}] - Optional data payload (e.g., postId) for the client app to handle.
+ * Sends a push notification to a user's devices via the Expo Push Notification Service.
  */
 const sendPushNotification = async (recipientId, title, body, data = {}) => {
     try {
-        // 1. Find the recipient user to get their device tokens
         const user = await User.findById(recipientId);
 
-        // 2. Check if the user exists and has any registered device tokens
         if (!user || !user.deviceTokens || user.deviceTokens.length === 0) {
-            console.log("Push notification not sent: User not found or has no registered device tokens.");
+            console.log("Push notification not sent: User has no registered device tokens.");
             return;
         }
 
-        // 3. Construct the push notification payload for FCM
+        // Filter out any invalid or non-string tokens
+        const validTokens = user.deviceTokens.filter(token => typeof token === 'string' && token.startsWith('ExponentPushToken'));
+
+        if (validTokens.length === 0) {
+            console.log("Push notification not sent: No valid ExpoPushTokens found for user.");
+            return;
+        }
+        
+        // Construct the message payload for the Expo Push API
         const message = {
-            notification: {
-                title, // e.g., "New Like"
-                body,  // e.g., "John Doe liked your post."
-            },
-            tokens: user.deviceTokens, // Array of device tokens to send to
-            data, // Optional data like { postId: '...' }
+            to: validTokens,
+            sound: 'default',
+            title: title,
+            body: body,
+            data: data,
         };
 
-        // 4. Send the message using the Firebase Admin SDK's modern method
-        const response = await admin.messaging().sendEachForMulticast(message);
-        console.log('Successfully sent push notification:', response.successCount, 'messages');
+        console.log('Sending notification via Expo Push Service with payload:', JSON.stringify(message, null, 2));
 
-        // Optional: Clean up invalid tokens from your database
-        if (response.failureCount > 0) {
-            const tokensToRemove = [];
-            response.responses.forEach((resp, idx) => {
-                // Check for errors indicating an invalid or unregistered token
-                if (!resp.success && (resp.error.code === 'messaging/registration-token-not-registered' || resp.error.code === 'messaging/invalid-registration-token')) {
-                    tokensToRemove.push(user.deviceTokens[idx]);
-                }
-            });
+        // Send the request to the Expo Push API
+        await fetch('https://exp.host/--/api/v2/push/send', {
+            method: 'POST',
+            headers: {
+                'Accept': 'application/json',
+                'Accept-encoding': 'gzip, deflate',
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(message),
+        });
 
-            if (tokensToRemove.length > 0) {
-                console.log('Removing invalid device tokens:', tokensToRemove);
-                await User.updateOne({ _id: recipientId }, { $pullAll: { deviceTokens: tokensToRemove } });
-                console.log('Removed', tokensToRemove.length, 'invalid tokens.');
-            }
-        }
+        console.log('Push notification request sent to Expo successfully.');
+        // Note: For production, you should handle the response (push tickets) to check for errors.
 
     } catch (error) {
-        console.error('Error sending push notification:', error);
+        console.error('Error sending push notification via Expo service:', error);
     }
 };
 
 /**
- * Creates and saves an in-app notification and triggers a push notification.
- * This is the main function you will call from your controllers.
- * @param {string} recipient - The ID of the user receiving the notification.
- * @param {string} sender - The ID of the user who triggered the notification.
- * @param {('like'|'comment'|'reply'|'follow'|'repost')} type - The type of notification.
- * @param {string} [postId=null] - The ID of the relevant post (optional).
+ * Creates an in-app notification and triggers a push notification.
  */
 exports.createNotification = async (recipient, sender, type, postId = null) => {
     try {
-        // Prevent users from receiving notifications for their own actions
-        if (recipient.toString() === sender.toString()) {
-            return;
-        }
+        if (recipient.toString() === sender.toString()) return;
 
-        const senderUser = await User.findById(sender).select('name'); // Optimize query to only get the name
+        const senderUser = await User.findById(sender).select('name');
         if (!senderUser) {
             console.error("Notification not created: Sender not found.");
             return;
         }
 
-        // --- Part 1: Create the In-App Notification ---
         let message = '';
         let title = 'New Notification';
-        // The data payload for the push notification
-        let pushData = {
-            notificationType: type,
-            senderId: sender.toString()
-        };
+        let pushData = { notificationType: type, senderId: sender.toString() };
 
         switch (type) {
             case 'like':
@@ -98,36 +80,17 @@ exports.createNotification = async (recipient, sender, type, postId = null) => {
                 message = `${senderUser.name} commented on your post.`;
                 if(postId) pushData.postId = postId.toString();
                 break;
-            case 'reply':
-                title = 'New Reply';
-                message = `${senderUser.name} replied to your comment.`;
-                if(postId) pushData.postId = postId.toString();
-                break;
             case 'follow':
                 title = 'New Follower';
                 message = `${senderUser.name} started following you.`;
                 break;
-            case 'repost':
-                title = 'New Repost';
-                message = `${senderUser.name} reposted your post.`;
-                if(postId) pushData.postId = postId.toString();
-                break;
-            default:
-                return;
+            // Add other cases as needed
         }
 
-        // Save the notification to your MongoDB database
-        const inAppNotification = new Notification({
-            recipient,
-            sender,
-            type,
-            message,
-            postId,
-        });
+        const inAppNotification = new Notification({ recipient, sender, type, message, postId });
         await inAppNotification.save();
         console.log("In-app notification created successfully.");
 
-        // --- Part 2: Trigger the Push Notification ---
         await sendPushNotification(recipient, title, message, pushData);
 
     } catch (error) {
