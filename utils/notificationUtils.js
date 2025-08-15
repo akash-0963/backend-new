@@ -1,4 +1,4 @@
-const fetch = require('node-fetch'); // Make sure to install node-fetch: npm install node-fetch
+const fetch = require('node-fetch');
 const Notification = require('../modules/notification');
 const User = require('../modules/user');
 
@@ -14,7 +14,6 @@ const sendPushNotification = async (recipientId, title, body, data = {}) => {
             return;
         }
 
-        // Filter out any invalid or non-string tokens
         const validTokens = user.deviceTokens.filter(token => typeof token === 'string' && token.startsWith('ExponentPushToken'));
 
         if (validTokens.length === 0) {
@@ -22,7 +21,6 @@ const sendPushNotification = async (recipientId, title, body, data = {}) => {
             return;
         }
         
-        // Construct the message payload for the Expo Push API
         const message = {
             to: validTokens,
             sound: 'default',
@@ -33,7 +31,7 @@ const sendPushNotification = async (recipientId, title, body, data = {}) => {
 
         console.log('Sending notification via Expo Push Service with payload:', JSON.stringify(message, null, 2));
 
-        // Send the request to the Expo Push API
+        // This fetch call will now work because you imported it at the top of the file.
         await fetch('https://exp.host/--/api/v2/push/send', {
             method: 'POST',
             headers: {
@@ -45,7 +43,6 @@ const sendPushNotification = async (recipientId, title, body, data = {}) => {
         });
 
         console.log('Push notification request sent to Expo successfully.');
-        // Note: For production, you should handle the response (push tickets) to check for errors.
 
     } catch (error) {
         console.error('Error sending push notification via Expo service:', error);

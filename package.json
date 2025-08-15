@@ -24,7 +24,7 @@
     "html-pdf-node": "^1.0.8",
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.3.3",
-    "node-fetch": "^3.3.2",
+    "node-fetch": "^2.7.0",
     "nodemailer": "^7.0.5",
     "nodemon": "^3.1.0",
     "pdfkit": "^0.17.1",
